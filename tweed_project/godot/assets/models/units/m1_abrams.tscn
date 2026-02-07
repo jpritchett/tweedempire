@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://cm1abramstank"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_hull"]
+size = Vector3(2.2, 0.7, 3.2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_turret"]
+size = Vector3(1.4, 0.55, 1.6)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_barrel"]
+top_radius = 0.09
+bottom_radius = 0.11
+height = 2.2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.55, 0.50, 0.35, 1)
+roughness = 0.75
+
+[node name="M1Abrams" type="Node3D"]
+
+[node name="Hull" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+mesh = SubResource("BoxMesh_hull")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="Turret" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, -0.1)
+mesh = SubResource("BoxMesh_turret")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="Barrel" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.95, -1.9)
+mesh = SubResource("CylinderMesh_barrel")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")

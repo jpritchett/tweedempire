@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://c8a6t90tank"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_hull"]
+size = Vector3(2.0, 0.6, 3.0)
+
+[sub_resource type="BoxMesh" id="BoxMesh_turret"]
+size = Vector3(1.2, 0.5, 1.4)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_barrel"]
+top_radius = 0.08
+bottom_radius = 0.1
+height = 2.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.25, 0.35, 0.22, 1)
+roughness = 0.8
+
+[node name="T90Tank" type="Node3D"]
+
+[node name="Hull" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+mesh = SubResource("BoxMesh_hull")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="Turret" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, -0.2)
+mesh = SubResource("BoxMesh_turret")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="Barrel" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.85, -1.8)
+mesh = SubResource("CylinderMesh_barrel")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")

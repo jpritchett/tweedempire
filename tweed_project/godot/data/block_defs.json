@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "verbs": [
+	{
+	  "id": "IF",
+	  "kind": "control",
+	  "sockets": 1,
+	  "desc": "Routes signal based on predicate input."
+	},
+	{
+	  "id": "ELSE",
+	  "kind": "control",
+	  "sockets": 1,
+	  "desc": "Fallback route."
+	},
+	{
+	  "id": "AND",
+	  "kind": "logic",
+	  "sockets": 2,
+	  "desc": "All inputs true."
+	},
+	{
+	  "id": "OR",
+	  "kind": "logic",
+	  "sockets": 2,
+	  "desc": "Any input true."
+	},
+	{
+	  "id": "NOT",
+	  "kind": "logic",
+	  "sockets": 1,
+	  "desc": "Invert boolean."
+	},
+	{
+	  "id": "DELAY",
+	  "kind": "time",
+	  "sockets": 1,
+	  "desc": "Delay a signal by N ticks."
+	},
+	{
+	  "id": "FILTER",
+	  "kind": "data",
+	  "sockets": 1,
+	  "desc": "Pass through values matching a threshold/rule."
+	},
+	{
+	  "id": "ROUTE",
+	  "kind": "data",
+	  "sockets": 1,
+	  "desc": "Switch output channel based on tag."
+	},
+	{
+	  "id": "QUEUE",
+	  "kind": "data",
+	  "sockets": 1,
+	  "desc": "Buffer events/requests; drain by capacity."
+	},
+	{
+	  "id": "THROTTLE",
+	  "kind": "time",
+	  "sockets": 1,
+	  "desc": "Limit how often a signal can fire."
+	},
+	{
+	  "id": "RETRY",
+	  "kind": "control",
+	  "sockets": 1,
+	  "desc": "Re-run action if condition not met."
+	},
+	{
+	  "id": "QUARANTINE",
+	  "kind": "bio",
+	  "sockets": 1,
+	  "desc": "Isolate a zone/route until clear."
+	},
+	{
+	  "id": "BROADCAST",
+	  "kind": "network",
+	  "sockets": 1,
+	  "desc": "Emit event to nearby listeners."
+	},
+	{
+	  "id": "FAILSAFE",
+	  "kind": "control",
+	  "sockets": 1,
+	  "desc": "Fallback behavior when power/signal fails."
+	}
+  ],
+  "blocks": [
+	{
+	  "id": "sensor_spores",
+	  "type": "sensor",
+	  "outputs": [
+        "spores"
+	  ],
+	  "params": {
+		"range": 9
+	  }
+	},
+	{
+	  "id": "sensor_moisture",
+	  "type": "sensor",
+	  "outputs": [
+        "moisture"
+	  ],
+	  "params": {
+		"range": 6
+	  }
+	},
+	{
+	  "id": "actuator_valve",
+	  "type": "actuator",
+	  "inputs": [
+        "open"
+	  ],
+	  "params": {
+		"flow": 1.0
+	  }
+	},
+	{
+	  "id": "actuator_shutter",
+	  "type": "actuator",
+	  "inputs": [
+        "toggle"
+	  ],
+	  "params": {
+		"speed": 1.0
+	  }
+	},
+	{
+	  "id": "actuator_sprayer",
+	  "type": "actuator",
+	  "inputs": [
+        "spray"
+	  ],
+	  "params": {
+		"rate": 1.0
+	  }
+	},
+	{
+	  "id": "logic_tile",
+	  "type": "logic",
+	  "inputs": [
+		"a",
+        "b"
+	  ],
+	  "outputs": [
+        "out"
+	  ],
+	  "params": {
+		"verb_slots": 2
+	  }
+	}
+  ]
+}

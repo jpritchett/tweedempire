@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "units": [
+	{
+	  "id": "t90_tank",
+	  "faction": "russia",
+	  "role": "heavy",
+	  "hp": 450,
+	  "speed": 4.5,
+	  "cost": {
+		"fiber": 80,
+		"parts": 120
+	  },
+	  "model": "res://assets/models/units/t90_tank.tscn"
+	},
+	{
+	  "id": "m1_abrams",
+	  "faction": "usa",
+	  "role": "main_battle",
+	  "hp": 500,
+	  "speed": 5.0,
+	  "cost": {
+		"fiber": 90,
+		"parts": 150
+	  },
+	  "model": "res://assets/models/units/m1_abrams.tscn"
+	},
+	{
+	  "id": "challenger2",
+	  "faction": "uk",
+	  "role": "main_battle",
+	  "hp": 480,
+	  "speed": 4.2,
+	  "cost": {
+		"fiber": 85,
+		"parts": 140
+	  },
+	  "model": "res://assets/models/units/challenger2.tscn"
+	}
+  ],
+  "structures": [
+	{
+	  "id": "loomcore_hub",
+	  "faction": "loomwrights",
+	  "role": "hq",
+	  "hp": 800,
+	  "footprint": [
+		3,
+		3
+	  ],
+	  "cost": {
+		"fiber": 120,
+		"parts": 60
+	  }
+	},
+	{
+	  "id": "patchbay_relay",
+	  "faction": "loomwrights",
+	  "role": "logic",
+	  "hp": 250,
+	  "footprint": [
+		2,
+		2
+	  ],
+	  "cost": {
+		"fiber": 40,
+		"parts": 25
+	  }
+	},
+	{
+	  "id": "irrigation_manifold",
+	  "faction": "loomwrights",
+	  "role": "utility",
+	  "hp": 220,
+	  "footprint": [
+		2,
+		2
+	  ],
+	  "cost": {
+		"fiber": 30,
+		"parts": 20
+	  }
+	}
+  ]
+}

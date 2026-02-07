@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/world/unit_view.gd" id="2"]
+
+[sub_resource type="BoxMesh" id="1"]
+size = Vector3(1.2, 0.6, 1.2)
+
+[node name="UnitView" type="Node3D"]
+script = ExtResource("2")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("1")
+
+[node name="Icon" type="Sprite3D" parent="."]
+billboard = 1
+pixel_size = 0.02
+render_priority = 1
+
+[node name="Label3D" type="Label3D" parent="."]
+position = Vector3(0, 1.2, 0)
+text = "unit"
+billboard = 1
