@@ -157,7 +157,7 @@ func _apply_terrain_shader() -> void:
 func _create_water_plane() -> void:
 	var water_y := water_level * height_scale
 	var water_mesh := PlaneMesh.new()
-	water_mesh.size = Vector2(size_x, size_z)
+	water_mesh.size = Vector2(size_x * 10.0, size_z * 10.0)
 	water_mesh.subdivide_width = 512
 	water_mesh.subdivide_depth = 512
 	var water_instance := MeshInstance3D.new()

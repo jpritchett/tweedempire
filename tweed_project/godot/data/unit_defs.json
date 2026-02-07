@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "units": [
 	{
 	  "id": "t90_tank",
@@ -7,6 +7,9 @@
 	  "role": "heavy",
 	  "hp": 450,
 	  "speed": 4.5,
+	  "attack_damage": 35,
+	  "attack_range": 8.0,
+	  "attack_cooldown": 20,
 	  "cost": {
 		"fiber": 80,
 		"parts": 120
@@ -19,6 +22,9 @@
 	  "role": "main_battle",
 	  "hp": 500,
 	  "speed": 5.0,
+	  "attack_damage": 40,
+	  "attack_range": 9.0,
+	  "attack_cooldown": 22,
 	  "cost": {
 		"fiber": 90,
 		"parts": 150
@@ -31,11 +37,38 @@
 	  "role": "main_battle",
 	  "hp": 480,
 	  "speed": 4.2,
+	  "attack_damage": 38,
+	  "attack_range": 10.0,
+	  "attack_cooldown": 24,
 	  "cost": {
 		"fiber": 85,
 		"parts": 140
 	  },
 	  "model": "res://assets/models/units/challenger2.tscn"
+	}
+  ],
+  "enemies": [
+	{
+	  "id": "spore_crawler",
+	  "faction": "blight",
+	  "role": "enemy",
+	  "hp": 80,
+	  "speed": 10.0,
+	  "attack_damage": 12,
+	  "attack_range": 3.0,
+	  "attack_cooldown": 15,
+	  "drops": ["FILTER", "IF"]
+	},
+	{
+	  "id": "blight_drone",
+	  "faction": "blight",
+	  "role": "enemy",
+	  "hp": 120,
+	  "speed": 8.0,
+	  "attack_damage": 18,
+	  "attack_range": 5.0,
+	  "attack_cooldown": 20,
+	  "drops": ["QUARANTINE", "THROTTLE"]
 	}
   ],
   "structures": [
@@ -44,10 +77,7 @@
 	  "faction": "loomwrights",
 	  "role": "hq",
 	  "hp": 800,
-	  "footprint": [
-		3,
-		3
-	  ],
+	  "footprint": [3, 3],
 	  "cost": {
 		"fiber": 120,
 		"parts": 60
@@ -58,10 +88,7 @@
 	  "faction": "loomwrights",
 	  "role": "logic",
 	  "hp": 250,
-	  "footprint": [
-		2,
-		2
-	  ],
+	  "footprint": [2, 2],
 	  "cost": {
 		"fiber": 40,
 		"parts": 25
@@ -72,10 +99,7 @@
 	  "faction": "loomwrights",
 	  "role": "utility",
 	  "hp": 220,
-	  "footprint": [
-		2,
-		2
-	  ],
+	  "footprint": [2, 2],
 	  "cost": {
 		"fiber": 30,
 		"parts": 20

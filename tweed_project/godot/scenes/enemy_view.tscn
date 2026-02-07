@@ -1,0 +1,32 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/world/enemy_view.gd" id="1"]
+
+[sub_resource type="SphereMesh" id="1"]
+radius = 0.5
+height = 1.0
+radial_segments = 12
+rings = 6
+
+[sub_resource type="BoxMesh" id="2"]
+size = Vector3(1.0, 0.08, 0.12)
+
+[node name="EnemyView" type="Node3D"]
+script = ExtResource("1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("1")
+
+[node name="HPBar" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+mesh = SubResource("2")
+
+[node name="Icon" type="Sprite3D" parent="."]
+billboard = 1
+pixel_size = 0.02
+render_priority = 1
+
+[node name="Label3D" type="Label3D" parent="."]
+position = Vector3(0, 1.4, 0)
+text = "enemy"
+billboard = 1

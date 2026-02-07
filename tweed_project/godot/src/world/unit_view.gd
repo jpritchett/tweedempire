@@ -131,6 +131,20 @@ func _update_model_selection(node: Node, sel: bool) -> void:
 	for child in node.get_children():
 		_update_model_selection(child, sel)
 
+func flash_attack() -> void:
+	## Brief white flash when this unit attacks
+	_mat.albedo_color = Color(1.0, 1.0, 0.8)
+	var tween := create_tween()
+	var base_color := Color(1.0, 0.85, 0.2) if _selected else Color(0.6, 0.6, 0.65)
+	tween.tween_property(_mat, "albedo_color", base_color, 0.12)
+
+func flash_damage() -> void:
+	## Red tint when this unit takes damage
+	_mat.albedo_color = Color(0.9, 0.2, 0.15)
+	var tween := create_tween()
+	var base_color := Color(1.0, 0.85, 0.2) if _selected else Color(0.6, 0.6, 0.65)
+	tween.tween_property(_mat, "albedo_color", base_color, 0.15)
+
 func set_zoom_lod(zoom_t: float) -> void:
 	var t = _smoothstep(ICON_START, ICON_FULL, zoom_t)
 	var show_3d = zoom_t < 0.8

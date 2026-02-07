@@ -38,3 +38,19 @@ func get_structure_def(id: String) -> Dictionary:
 		if s.get("id","") == id:
 			return s
 	return {}
+
+func get_enemy_def(id: String) -> Dictionary:
+	for e in unit_defs.get("enemies", []):
+		if e.get("id","") == id:
+			return e
+	return {}
+
+func get_any_def(id: String) -> Dictionary:
+	var d := get_unit_def(id)
+	if not d.is_empty():
+		return d
+	d = get_enemy_def(id)
+	if not d.is_empty():
+		return d
+	d = get_structure_def(id)
+	return d

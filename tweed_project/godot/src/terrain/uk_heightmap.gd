@@ -164,6 +164,10 @@ func generate() -> Image:
 	if height_range < 0.0001:
 		height_range = 1.0
 
+	# Edge falloff: slope terrain below water near map borders
+	# edge_margin is in pixels — terrain within this margin slopes to 0
+	var edge_margin := int(resolution.x * 0.08)  # 8% of map width
+
 	for py in range(resolution.y):
 		for px in range(resolution.x):
 			var idx := py * resolution.x + px
@@ -177,6 +181,19 @@ func generate() -> Image:
 
 			# Scale down so peaks don't reach full rock zone
 			height *= height_ceiling
+
+			# Edge falloff: smoothly ramp down near borders
+			var dist_left := px
+			var dist_right := resolution.x - 1 - px
+			var dist_top := py
+			var dist_bottom := resolution.y - 1 - py
+			var dist_edge := mini(mini(dist_left, dist_right), mini(dist_top, dist_bottom))
+			if dist_edge < edge_margin:
+				var t := float(dist_edge) / float(edge_margin)
+				# Smoothstep for a natural-looking slope
+				t = t * t * (3.0 - 2.0 * t)
+				# Ramp from -0.05 (below water) up to the actual height
+				height = lerpf(-0.05, height, t)
 
 			img.set_pixel(px, py, Color(height, height, height, 1.0))
 

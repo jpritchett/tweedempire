@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/world/rune_view.gd" id="1"]
+
+[sub_resource type="PrismMesh" id="1"]
+size = Vector3(0.4, 0.6, 0.4)
+
+[node name="RuneView" type="Node3D"]
+script = ExtResource("1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("1")
+
+[node name="Icon" type="Sprite3D" parent="."]
+billboard = 1
+pixel_size = 0.02
+render_priority = 1
+
+[node name="Label3D" type="Label3D" parent="."]
+position = Vector3(0, 1.2, 0)
+text = "rune"
+billboard = 1

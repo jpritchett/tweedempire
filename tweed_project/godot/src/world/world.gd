@@ -8,11 +8,15 @@ extends Node3D
 var unit_scene := preload("res://scenes/unit_view.tscn")
 var structure_scene := preload("res://scenes/structure_view.tscn")
 var ghost_scene := preload("res://scenes/build_ghost.tscn")
+var enemy_scene := preload("res://scenes/enemy_view.tscn")
+var rune_scene := preload("res://scenes/rune_view.tscn")
 
 var terrain: HeightmapTerrain
 var grid: HiddenGrid
 var ghost: Node3D
 var sky_controller: SkyController
+var enemy_spawner: EnemySpawner
+var inventory_hud: InventoryHUD
 
 # entity_id -> view node
 var views := {}
@@ -25,6 +29,10 @@ var build_mode := false
 var build_def := "patchbay_relay"
 var build_footprint := Vector2i(2,2)
 var _last_zoom_t := -1.0
+
+# Follow mode: camera tracks an enemy entity
+var _follow_eid: int = -1
+var _follow_zoom: float = 25.0  # Close zoom when following
 
 func _ready() -> void:
 	# Create terrain with UK-inspired heightmap
@@ -53,6 +61,10 @@ func _ready() -> void:
 	grid.init_for_terrain(terrain)
 	add_child(grid)
 	cam_rig.configure(terrain.world_bounds(), grid.cell_size, terrain)
+	# Start with a closer view
+	cam_rig._target_zoom = 60.0
+	cam_rig._zoom = 60.0
+	cam_rig._default_zoom = 60.0
 	_setup_light()
 
 	# Spawn test entities (units) - cycle through tank types
@@ -63,9 +75,24 @@ func _ready() -> void:
 			var tank_type = tank_types[i % tank_types.size()]
 			var eid = Simulation.spawn_entity(tank_type, spawn_pos, 0)
 			Simulation.state.entities[eid]["kind"] = "unit"
+			Simulation.state.entities[eid]["attack_cooldown_current"] = 0
+			Simulation.state.entities[eid]["attack_target"] = -1
 			_spawn_view(eid)
 
+	# Setup enemy spawner
+	enemy_spawner = EnemySpawner.new()
+	enemy_spawner.grid = grid
+	enemy_spawner.terrain = terrain
+	add_child(enemy_spawner)
+
+	# Setup inventory HUD
+	inventory_hud = InventoryHUD.new()
+	add_child(inventory_hud)
+
+	# Connect simulation signals
 	Simulation.tick_advanced.connect(_on_tick)
+	Simulation.entity_died.connect(_on_entity_died)
+	Simulation.rune_picked_up.connect(_on_rune_picked_up)
 
 func _setup_environment() -> void:
 	var env_node := WorldEnvironment.new()
@@ -122,13 +149,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_B:
 			_toggle_build_mode()
-		elif event.keycode == KEY_1:
-			# cycle build def quick test
+		elif event.keycode == KEY_ESCAPE:
+			_exit_follow_mode()
+		elif event.keycode == KEY_R:
+			_socket_verb_into_structure()
+		elif event.keycode == KEY_L:
+			_inspect_logic_graph()
+		# Shift+1/2/3: structure selection in build mode
+		elif event.shift_pressed and event.keycode == KEY_1:
 			_set_build_def("patchbay_relay")
-		elif event.keycode == KEY_2:
+		elif event.shift_pressed and event.keycode == KEY_2:
 			_set_build_def("loomcore_hub")
-		elif event.keycode == KEY_3:
+		elif event.shift_pressed and event.keycode == KEY_3:
 			_set_build_def("irrigation_manifold")
+		# 1-9: follow nth enemy
+		elif not event.shift_pressed and not event.ctrl_pressed:
+			var num := _number_key(event.keycode)
+			if num >= 1 and num <= 9:
+				_follow_enemy(num)
 
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
@@ -160,6 +198,15 @@ func _toggle_build_mode() -> void:
 			ghost = null
 
 func _process(_delta: float) -> void:
+	# Follow mode: keep camera locked on the followed entity
+	if _follow_eid != -1:
+		var fe = Simulation.state.entities.get(_follow_eid, null)
+		if fe == null:
+			_exit_follow_mode()
+		else:
+			var fp := Vector3(fe.pos[0], fe.pos[1], fe.pos[2])
+			cam_rig.set_focus(fp)
+
 	if build_mode and ghost != null:
 		var hit = _ray_pick_terrain()
 		if hit.has("position"):
@@ -233,7 +280,137 @@ func _try_place_building() -> void:
 	Simulation.state.entities[eid]["kind"] = "structure"
 	Simulation.state.entities[eid]["footprint"] = [build_footprint.x, build_footprint.y]
 	Simulation.state.entities[eid]["grid_origin"] = [origin.x, origin.y]
+
+	# Auto-create default logic graph for this structure
+	_create_default_logic_graph(eid)
+
 	_spawn_view(eid)
+
+func _create_default_logic_graph(eid: int) -> void:
+	## Creates a default sensor -> logic -> actuator graph for a new structure
+	var graph := LogicGraphResource.new()
+
+	# Add sensor (spore detector)
+	var sensor_id := graph.add_node("sensor", "sensor_spores", Vector2(0, 0))
+	# Add logic tile (empty verb slots — player sockets verbs later)
+	var logic_id := graph.add_node("logic", "logic_tile", Vector2(1, 0))
+	# Add actuator (sprayer)
+	var actuator_id := graph.add_node("actuator", "actuator_sprayer", Vector2(2, 0))
+
+	# Connect sensor -> logic -> actuator
+	graph.connect_nodes(sensor_id, "spores", logic_id, "a")
+	graph.connect_nodes(logic_id, "out", actuator_id, "spray")
+
+	# Create runtime and register
+	var runtime := LogicRuntime.new()
+	runtime.set_graph(graph)
+	Simulation.state.logic_networks[eid] = runtime
+
+	# Store graph reference on entity
+	Simulation.state.entities[eid]["logic_graph"] = graph
+	Simulation.state.entities[eid]["verb_slots"] = ["", ""]
+
+func _socket_verb_into_structure() -> void:
+	## R key: socket next inventory verb into selected structure's first empty slot
+	if selected_eid == -1:
+		return
+	var e = Simulation.state.entities.get(selected_eid, null)
+	if e == null or e.get("kind", "") != "structure":
+		print("[World] Select a structure first (R to socket verb)")
+		return
+
+	var inv: Array = Simulation.state.inventory
+	if inv.is_empty():
+		print("[World] No verbs in inventory to socket")
+		return
+
+	var slots: Array = e.get("verb_slots", [])
+	var empty_idx := -1
+	for i in range(slots.size()):
+		if slots[i] == "":
+			empty_idx = i
+			break
+
+	if empty_idx == -1:
+		print("[World] All verb slots are full on this structure")
+		return
+
+	# Take the first verb from inventory
+	var verb_id: String = inv[0]
+	inv.remove_at(0)
+
+	# Socket it
+	slots[empty_idx] = verb_id
+	e["verb_slots"] = slots
+
+	# Update the logic graph node's verb_slots
+	var graph: LogicGraphResource = e.get("logic_graph", null)
+	if graph != null:
+		for n in graph.nodes:
+			if n.get("kind", "") == "logic":
+				n["verb_slots"] = slots.duplicate()
+				break
+		# Re-set graph on runtime to apply changes
+		var runtime = Simulation.state.logic_networks.get(selected_eid, null)
+		if runtime != null:
+			runtime.set_graph(graph)
+
+	print("[World] Socketed '%s' into slot %d of %s" % [verb_id, empty_idx, e.def_id])
+	# Refresh HUD
+	if inventory_hud != null:
+		inventory_hud._rebuild()
+
+func _inspect_logic_graph() -> void:
+	## L key: print logic graph info for selected structure
+	if selected_eid == -1:
+		return
+	var e = Simulation.state.entities.get(selected_eid, null)
+	if e == null or e.get("kind", "") != "structure":
+		print("[World] Select a structure to inspect (L key)")
+		return
+
+	var graph: LogicGraphResource = e.get("logic_graph", null)
+	if graph == null:
+		print("[World] No logic graph on this structure")
+		return
+
+	print("=== Logic Graph for %s (eid %d) ===" % [e.def_id, selected_eid])
+	print("Verb slots: %s" % str(e.get("verb_slots", [])))
+	for n in graph.nodes:
+		print("  Node %d: %s (%s) verbs=%s" % [n.id, n.kind, n.def_id, str(n.get("verb_slots", []))])
+	for edge in graph.edges:
+		print("  Edge: %d.%s -> %d.%s" % [edge.from, edge.from_port, edge.to, edge.to_port])
+
+	var runtime = Simulation.state.logic_networks.get(selected_eid, null)
+	if runtime != null:
+		print("  Runtime values: %s" % str(runtime.values))
+		print("  Last events: %s" % str(runtime.events))
+
+func _number_key(keycode: int) -> int:
+	## Returns 1-9 for KEY_1..KEY_9, or 0 if not a number key
+	if keycode >= KEY_1 and keycode <= KEY_9:
+		return keycode - KEY_1 + 1
+	return 0
+
+func _follow_enemy(index: int) -> void:
+	## Follow the nth enemy entity (1-indexed)
+	var enemies: Array[int] = []
+	for eid in Simulation.state.entities.keys():
+		if Simulation.state.entities[eid].get("kind", "") == "enemy":
+			enemies.append(eid)
+	enemies.sort()
+	if index > enemies.size():
+		print("[World] No enemy #%d (only %d enemies)" % [index, enemies.size()])
+		return
+	_follow_eid = enemies[index - 1]
+	cam_rig._target_zoom = _follow_zoom
+	print("[World] Following enemy #%d (eid %d)" % [index, _follow_eid])
+
+func _exit_follow_mode() -> void:
+	if _follow_eid != -1:
+		_follow_eid = -1
+		cam_rig._target_zoom = cam_rig._default_zoom
+		print("[World] Exited follow mode")
 
 func _ray_pick_terrain() -> Dictionary:
 	return cam_rig.screen_to_ground(get_viewport().get_mouse_position())
@@ -253,7 +430,24 @@ func _find_nearest_entity(pos: Vector3, radius: float) -> int:
 
 func _update_selection_ui() -> void:
 	for eid in views.keys():
-		views[eid].set_selected(eid == selected_eid)
+		if views[eid] != null and is_instance_valid(views[eid]):
+			views[eid].set_selected(eid == selected_eid)
+
+func _on_entity_died(eid: int, pos: Vector3, _def_id: String, _kind: String) -> void:
+	# Play death animation on view if it exists
+	var v = views.get(eid, null)
+	if v != null and is_instance_valid(v):
+		if v.has_method("play_death"):
+			v.play_death()
+			# Remove from views dict — the view will queue_free itself after animation
+			views.erase(eid)
+		else:
+			v.queue_free()
+			views.erase(eid)
+	paths.erase(eid)
+
+func _on_rune_picked_up(verb_id: String) -> void:
+	print("[World] Picked up verb rune: %s" % verb_id)
 
 func _on_tick(_t: int) -> void:
 	# Move units along stored paths (simple snap step per tick)
@@ -271,42 +465,76 @@ func _on_tick(_t: int) -> void:
 			continue
 		e.pos = [wp.x, wp.y, wp.z]
 
-	# Remove views for deleted entities
+	# Remove views for deleted entities (that weren't caught by entity_died signal)
 	for eid in views.keys():
 		if not Simulation.state.entities.has(eid):
-			views[eid].queue_free()
+			if views[eid] != null and is_instance_valid(views[eid]):
+				views[eid].queue_free()
 			views.erase(eid)
 			paths.erase(eid)
 
-	# Sync views
+	# Sync views — spawn for new entities, update positions
 	for eid in Simulation.state.entities.keys():
 		if not views.has(eid):
 			_spawn_view(eid)
 		var e = Simulation.state.entities.get(eid, null)
 		if e == null:
 			continue
+		var v = views.get(eid, null)
+		if v == null or not is_instance_valid(v):
+			continue
 		var p = e.pos
-		views[eid].global_position = Vector3(p[0], p[1], p[2])
-		views[eid].set_label(e.def_id)
+		v.global_position = Vector3(p[0], p[1], p[2])
+		v.set_label(e.def_id)
+
+		# Update enemy-specific visuals
+		var kind: String = e.get("kind", "")
+		if kind == "enemy" and v.has_method("update_hp"):
+			v.update_hp(e.get("hp", 0))
+			# Flash on damage
+			if e.get("last_hit_tick", -1) == Simulation.tick and v.has_method("flash_damage"):
+				v.flash_damage()
+
+		# Update structure actuator visual feedback
+		if kind == "structure" and v.has_method("set_actuator_state"):
+			var firing: bool = e.get("actuator_firing", false)
+			var has_graph: bool = Simulation.state.logic_networks.has(eid)
+			v.set_actuator_state(has_graph, firing)
 
 func _spawn_view(eid: int) -> void:
 	var e = Simulation.state.entities[eid]
-	var kind = e.get("kind","unit")
+	var kind = e.get("kind", "unit")
 	var v
-	if kind == "structure":
-		v = structure_scene.instantiate()
-		# Scale structure mesh to footprint
-		var fp = e.get("footprint", [2,2])
-		v.call_deferred("set_size", float(fp[0]) * grid.cell_size, float(fp[1]) * grid.cell_size)
-	else:
-		v = unit_scene.instantiate()
+	match kind:
+		"structure":
+			v = structure_scene.instantiate()
+			var fp = e.get("footprint", [2,2])
+			v.call_deferred("set_size", float(fp[0]) * grid.cell_size, float(fp[1]) * grid.cell_size)
+		"enemy":
+			v = enemy_scene.instantiate()
+		"rune":
+			v = rune_scene.instantiate()
+		_:
+			v = unit_scene.instantiate()
 	unit_root.add_child(v)
 	views[eid] = v
-	# Load model after adding to tree (so _ready() has run and _mesh is initialized)
-	if kind != "structure":
-		var unit_def = Registry.get_unit_def(e.def_id)
-		var model_path = unit_def.get("model", "")
-		if not model_path.is_empty():
-			v.set_model(model_path)
-	# Apply zoom LOD after model is loaded so visibility is set correctly
+
+	# Kind-specific setup after adding to tree
+	match kind:
+		"enemy":
+			var def := Registry.get_enemy_def(e.def_id)
+			var max_hp: int = def.get("hp", 100)
+			if v.has_method("set_max_hp"):
+				v.set_max_hp(max_hp)
+				v.update_hp(e.get("hp", max_hp))
+		"rune":
+			if v.has_method("set_verb"):
+				v.set_verb(e.get("verb_id", ""))
+		"unit":
+			var unit_def = Registry.get_unit_def(e.def_id)
+			var model_path = unit_def.get("model", "")
+			if not model_path.is_empty():
+				v.set_model(model_path)
+
+	# Apply zoom LOD after setup
 	v.call_deferred("set_zoom_lod", cam_rig.get_zoom_t())

@@ -1,102 +1,151 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_disabled;
 
-// Wave parameters
+// ─── Gerstner Wave Parameters ────────────────────────────────────────────────
+// Each wave: vec4(direction.x, direction.y, steepness, wavelength)
 group_uniforms waves;
-uniform float wave_speed : hint_range(0.0, 3.0) = 0.6;
-uniform float wave_scale : hint_range(0.5, 40.0) = 12.0;
-uniform float wave_amplitude : hint_range(0.0, 2.0) = 0.4;
-uniform float wave2_scale : hint_range(0.5, 40.0) = 18.0;
-uniform float wave2_speed : hint_range(0.0, 3.0) = 0.4;
-uniform float wave2_amplitude : hint_range(0.0, 2.0) = 0.25;
+uniform vec4 wave_a = vec4(1.0, 0.0, 0.35, 12.0);
+uniform vec4 wave_b = vec4(0.6, 0.85, 0.25, 8.0);
+uniform vec4 wave_c = vec4(-0.4, 0.7, 0.20, 5.0);
+uniform vec4 wave_d = vec4(0.8, -0.3, 0.15, 3.0);
+uniform float amplitude : hint_range(0.0, 3.0) = 0.5;
+uniform float speed : hint_range(0.0, 5.0) = 0.36;
 
-// Colours
+// ─── Colours ─────────────────────────────────────────────────────────────────
 group_uniforms colors;
-uniform vec3 shallow_color : source_color = vec3(0.15, 0.45, 0.45);
-uniform vec3 deep_color : source_color = vec3(0.05, 0.12, 0.22);
-uniform vec3 foam_color : source_color = vec3(0.7, 0.8, 0.85);
+uniform vec3 shallow_color : source_color = vec3(0.10, 0.14, 0.16);
+uniform vec3 deep_color : source_color = vec3(0.06, 0.09, 0.12);
+uniform vec3 foam_color : source_color = vec3(0.22, 0.24, 0.26);
 
-// Surface
+// ─── Surface ─────────────────────────────────────────────────────────────────
 group_uniforms surface;
-uniform float water_alpha : hint_range(0.0, 1.0) = 0.92;
-uniform float water_roughness : hint_range(0.0, 1.0) = 0.15;
-uniform float water_metallic : hint_range(0.0, 1.0) = 0.1;
-uniform float ripple_scale : hint_range(0.1, 5.0) = 1.5;
-uniform float ripple_speed : hint_range(0.0, 2.0) = 0.3;
-uniform float ripple_strength : hint_range(0.0, 0.15) = 0.04;
+uniform float water_alpha : hint_range(0.0, 1.0) = 0.96;
+uniform float water_roughness : hint_range(0.0, 1.0) = 0.45;
+uniform float water_metallic : hint_range(0.0, 1.0) = 0.0;
+uniform float foam_threshold : hint_range(0.0, 1.0) = 0.7;
+uniform float fresnel_power : hint_range(0.5, 8.0) = 3.0;
+uniform float normal_detail_scale : hint_range(0.0, 2.0) = 0.5;
 
-// World-space position
+// ─── Varyings ────────────────────────────────────────────────────────────────
 varying vec3 world_pos;
+varying vec3 world_normal;
+varying float wave_crest;
 
-// Hash for noise
-float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+// ─── Gerstner Wave Function ──────────────────────────────────────────────────
+// Returns displacement vector (xyz) for a single Gerstner wave.
+// Gerstner waves move vertices in circular orbits — horizontal toward
+// each crest and vertical up/down — creating sharp peaks and flat troughs.
+vec3 gerstner(vec4 wave_params, vec2 p, float t) {
+	vec2 d = normalize(wave_params.xy);
+	float steepness = wave_params.z;
+	float wavelength = wave_params.w;
+
+	float k = 6.28318 / wavelength;           // wave number (2*PI / wavelength)
+	float c = sqrt(9.8 / k);                  // phase speed (deep water dispersion)
+	float f = k * (dot(d, p) - c * t);        // phase
+	float a = steepness / k;                   // amplitude derived from steepness
+
+	// Horizontal displacement toward crest + vertical sine displacement
+	return vec3(
+		d.x * a * cos(f),
+		a * sin(f),
+		d.y * a * cos(f)
+	);
 }
 
-float noise(vec2 p) {
+// ─── Gerstner Normal via Tangent/Binormal ────────────────────────────────────
+// Accumulates tangent and binormal partial derivatives for each wave.
+// The cross product of the final binormal × tangent gives the surface normal.
+void gerstner_normal(vec4 wave_params, vec2 p, float t,
+                     inout vec3 tangent, inout vec3 binormal) {
+	vec2 d = normalize(wave_params.xy);
+	float steepness = wave_params.z;
+	float wavelength = wave_params.w;
+
+	float k = 6.28318 / wavelength;
+	float c = sqrt(9.8 / k);
+	float f = k * (dot(d, p) - c * t);
+
+	tangent += vec3(
+		-d.x * d.x * steepness * sin(f),
+		d.x * steepness * cos(f),
+		-d.x * d.y * steepness * sin(f)
+	);
+	binormal += vec3(
+		-d.x * d.y * steepness * sin(f),
+		d.y * steepness * cos(f),
+		-d.y * d.y * steepness * sin(f)
+	);
+}
+
+// ─── Simple noise for surface detail ─────────────────────────────────────────
+float hash2(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float noise2(vec2 p) {
 	vec2 i = floor(p);
 	vec2 f = fract(p);
 	f = f * f * (3.0 - 2.0 * f);
-	float a = hash(i);
-	float b = hash(i + vec2(1.0, 0.0));
-	float c = hash(i + vec2(0.0, 1.0));
-	float d = hash(i + vec2(1.0, 1.0));
+	float a = hash2(i);
+	float b = hash2(i + vec2(1.0, 0.0));
+	float c = hash2(i + vec2(0.0, 1.0));
+	float d = hash2(i + vec2(1.0, 1.0));
 	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-float fbm(vec2 p) {
-	float v = 0.0;
-	float a = 0.5;
-	for (int i = 0; i < 4; i++) {
-		v += a * noise(p);
-		p *= 2.1;
-		a *= 0.45;
-	}
-	return v;
-}
-
-// Wave height at a world xz position
-float wave_height(vec2 xz, float time) {
-	// Wave 1 — main swell, moving along X+Z diagonal
-	float w1 = sin(xz.x / wave_scale + xz.y / wave_scale * 0.7 + time * wave_speed) * wave_amplitude;
-
-	// Wave 2 — cross-wave at different angle and frequency
-	float w2 = sin(xz.x / wave2_scale * 0.6 - xz.y / wave2_scale + time * wave2_speed * 1.3) * wave2_amplitude;
-
-	// Wave 3 — small choppy detail
-	float w3 = sin(xz.x / 4.0 + time * 1.2) * cos(xz.y / 3.5 + time * 0.9) * 0.1;
-
-	return w1 + w2 + w3;
-}
-
+// ─── Vertex Shader ───────────────────────────────────────────────────────────
 void vertex() {
-	// Compute world position before displacement
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec2 p = world_pos.xz;
+	float t = TIME * speed;
 
-	// Displace vertex Y by wave function
-	float h = wave_height(world_pos.xz, TIME);
-	VERTEX.y += h;
+	// Sum 4 Gerstner wave displacements at different directions/frequencies
+	vec3 disp = vec3(0.0);
+	disp += gerstner(wave_a, p, t);
+	disp += gerstner(wave_b, p, t);
+	disp += gerstner(wave_c, p, t);
+	disp += gerstner(wave_d, p, t);
 
-	// Recompute normal from wave partial derivatives (analytical)
-	float eps = 0.5;
-	float h_r = wave_height(world_pos.xz + vec2(eps, 0.0), TIME);
-	float h_u = wave_height(world_pos.xz + vec2(0.0, eps), TIME);
-	float dx = (h_r - h) / eps;
-	float dz = (h_u - h) / eps;
-	NORMAL = normalize(vec3(-dx, 1.0, -dz));
+	// Apply global amplitude scaling
+	VERTEX += disp * amplitude;
+
+	// Analytical surface normal from accumulated wave tangent/binormal
+	vec3 tangent = vec3(1.0, 0.0, 0.0);
+	vec3 binormal = vec3(0.0, 0.0, 1.0);
+	gerstner_normal(wave_a, p, t, tangent, binormal);
+	gerstner_normal(wave_b, p, t, tangent, binormal);
+	gerstner_normal(wave_c, p, t, tangent, binormal);
+	gerstner_normal(wave_d, p, t, tangent, binormal);
+	vec3 n = normalize(cross(binormal, tangent));
+	NORMAL = n;
+
+	// Pass wave crest height to fragment shader for foam rendering
+	wave_crest = disp.y * amplitude;
+	world_normal = n;
 }
 
+// ─── Fragment Shader ─────────────────────────────────────────────────────────
 void fragment() {
-	// Base water colour — mostly uniform
-	vec3 water_color = mix(shallow_color, deep_color, 0.5);
+	// Fresnel: more reflective at glancing angles (like real water)
+	float ndotv = max(dot(world_normal, VIEW), 0.0);
+	float fresnel = pow(1.0 - ndotv, fresnel_power);
 
-	// Use the wave-displaced normal for specular variation — this is what
-	// makes the surface look alive, not noise blobs
-	// The vertex shader already set NORMAL from the wave derivatives,
-	// so lighting/specular will naturally shimmer with the waves.
+	// Water colour: subtle blend shallow → deep based on view angle
+	vec3 water_col = mix(shallow_color, deep_color, 0.4 + fresnel * 0.3);
 
-	ALBEDO = water_color;
-	ALPHA = water_alpha;
-	ROUGHNESS = water_roughness;
+	// Foam on wave crests — subtle whitecaps only on the highest peaks
+	float foam_edge = foam_threshold * amplitude;
+	float foam_mask = smoothstep(foam_edge, amplitude, wave_crest);
+	water_col = mix(water_col, foam_color, foam_mask * 0.35);
+
+	// Very subtle noise ripple for micro-detail
+	float ripple = noise2(world_pos.xz * 2.0 + TIME * 0.3);
+	ripple = (ripple - 0.5) * normal_detail_scale * 0.02;
+	water_col += ripple;
+
+	ALBEDO = water_col;
+	ALPHA = mix(water_alpha, 1.0, foam_mask * 0.4);
+	ROUGHNESS = mix(water_roughness, 0.55, foam_mask);
 	METALLIC = water_metallic;
+	SPECULAR = 0.2 + fresnel * 0.15;
 }
