@@ -26,6 +26,13 @@ uniform float cloud_height : hint_range(0.1, 0.5) = 0.2;
 uniform vec3 cloud_color : source_color = vec3(1.0, 1.0, 1.0);
 uniform int cloud_octaves : hint_range(1, 8) = 5;
 
+// Weather uniforms (set by WeatherController)
+group_uniforms weather;
+uniform vec2 weather_wind = vec2(0.0, 0.0);
+uniform float weather_cloud_boost : hint_range(0.0, 1.0) = 0.0;
+uniform float weather_fog_intensity : hint_range(0.0, 1.0) = 0.0;
+uniform float lightning_flash : hint_range(0.0, 1.0) = 0.0;
+
 // Star uniforms
 group_uniforms stars;
 uniform float star_density : hint_range(100.0, 2000.0) = 800.0;
@@ -115,14 +122,17 @@ float get_clouds(vec3 dir, float time) {
 	vec2 uv = dir.xz / (dir.y + cloud_height);
 	uv *= cloud_scale;
 
-	// Animate clouds
-	uv += vec2(time * cloud_speed, time * cloud_speed * 0.3);
+	// Animate clouds — base drift + weather wind influence
+	vec2 wind_drift = vec2(time * cloud_speed, time * cloud_speed * 0.3);
+	wind_drift += weather_wind * time * 0.005;
+	uv += wind_drift;
 
 	// Generate cloud noise using FBM
 	float noise = fbm(uv, cloud_octaves);
 
-	// Apply density and softness
-	float clouds = smoothstep(1.0 - cloud_density, 1.0 - cloud_density + cloud_softness, noise);
+	// Apply density and softness, boosted by weather
+	float effective_density = cloud_density + weather_cloud_boost * 0.4;
+	float clouds = smoothstep(1.0 - effective_density, 1.0 - effective_density + cloud_softness, noise);
 
 	// Fade clouds near horizon
 	float horizon_fade = smoothstep(0.0, 0.15, dir.y);
@@ -197,6 +207,17 @@ void sky() {
 	if (star_visibility > 0.01) {
 		float star_value = stars(dir, TIME);
 		sky_color += vec3(star_value) * star_visibility;
+	}
+
+	// Weather fog: wash out horizon when foggy
+	if (weather_fog_intensity > 0.01) {
+		vec3 fog_col = mix(night_horizon_color, day_horizon_color, day_factor) * 0.8;
+		sky_color = mix(sky_color, fog_col, weather_fog_intensity * horizon_blend * 0.6);
+	}
+
+	// Lightning flash: illuminate clouds from within
+	if (lightning_flash > 0.01) {
+		sky_color += vec3(0.8, 0.85, 1.0) * lightning_flash * cloud_coverage * 3.0;
 	}
 
 	// Ground (below horizon)

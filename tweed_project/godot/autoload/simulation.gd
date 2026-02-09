@@ -6,6 +6,7 @@ extends Node
 signal tick_advanced(tick: int)
 signal entity_died(eid: int, pos: Vector3, def_id: String, kind: String)
 signal rune_picked_up(verb_id: String)
+signal weather_stepped
 
 const TICK_RATE := 20.0 # 20Hz is a good RTS baseline
 var tick: int = 0
@@ -16,7 +17,11 @@ var state := {
 	"entities": {},          # entity_id -> entity_state dictionary
 	"logic_networks": {},    # structure_eid -> LogicRuntime instance
 	"inventory": [],         # Array of verb ID strings the player has collected
+	"weather_tick": 0,       # Sub-tick counter for weather (steps every 5 sim ticks)
 }
+
+var weather_sim: WeatherSimulation
+var weather_rng: RandomNumberGenerator
 
 var _combat_system: CombatSystem
 
@@ -24,6 +29,12 @@ func _ready() -> void:
 	_combat_system = CombatSystem.new()
 	add_child(_combat_system)
 	_combat_system.entity_died.connect(_on_combat_death)
+
+	# Weather simulation
+	weather_sim = WeatherSimulation.new()
+	weather_sim.setup(Vector2(256.0, 256.0))
+	weather_rng = RandomNumberGenerator.new()
+	weather_rng.seed = 12345
 
 func _process(delta: float) -> void:
 	if paused:
@@ -54,6 +65,13 @@ func _step_sim() -> void:
 
 	# 4) Evaluate automation logic networks
 	_eval_logic_networks()
+
+	# 5) Weather: step every 5 sim ticks (= 4 Hz at 20 Hz base)
+	state.weather_tick += 1
+	if state.weather_tick >= 5:
+		state.weather_tick = 0
+		weather_sim.step(weather_rng)
+		weather_stepped.emit()
 
 func _process_rune_pickups() -> void:
 	var pickup_range := 2.5
