@@ -18,6 +18,7 @@ var sky_controller: SkyController
 var enemy_spawner: EnemySpawner
 var inventory_hud: InventoryHUD
 var weather_controller: WeatherController
+var weather_hud: WeatherHUD
 
 # Stored for weather controller access
 var _sky_mat: ShaderMaterial
@@ -105,6 +106,11 @@ func _ready() -> void:
 		sun,
 		cam
 	)
+
+	# Setup weather HUD
+	weather_hud = WeatherHUD.new()
+	add_child(weather_hud)
+	weather_hud.setup(weather_controller, cam)
 
 	# Connect simulation signals
 	Simulation.tick_advanced.connect(_on_tick)
