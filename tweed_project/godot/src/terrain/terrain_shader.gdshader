@@ -30,6 +30,11 @@ uniform float ambient_occlusion : hint_range(0.0, 1.0) = 0.25;
 uniform float moisture_scale : hint_range(1.0, 100.0) = 16.0;
 uniform float moisture_strength : hint_range(0.0, 0.5) = 0.15;
 
+// Weather (set by WeatherController)
+group_uniforms weather;
+uniform sampler2D weather_rain_fog_tex : filter_linear, repeat_disable;
+uniform vec2 weather_world_size = vec2(256.0, 256.0);
+
 // Detail noise for variation
 group_uniforms detail;
 uniform float detail_scale : hint_range(1.0, 200.0) = 48.0;
@@ -118,7 +123,26 @@ void fragment() {
 	// Ambient occlusion: darken valleys slightly
 	float ao = mix(1.0 - ambient_occlusion, 1.0, flatness);
 
+	// Weather effects: sample rain/fog/temp at world position
+	vec2 weather_uv = world_pos.xz / weather_world_size;
+	vec4 weather_sample = texture(weather_rain_fog_tex, weather_uv);
+	float wetness = weather_sample.r;      // rain
+	float local_temp = weather_sample.b;   // temperature
+
+	// Wet terrain: darken albedo + reduce roughness
+	final_color *= mix(1.0, 0.6, wetness);
+	float rough = mix(1.0, 0.3, wetness);
+
+	// Snow on cold, flat surfaces at higher elevations
+	float cold_factor = smoothstep(0.35, 0.15, local_temp);
+	float snow_amount = cold_factor * smoothstep(0.3, 0.6, flatness) * smoothstep(0.2, 0.5, h);
+	// Boost snow from rain (precipitation falls as snow when cold)
+	snow_amount = clamp(snow_amount + wetness * cold_factor * 0.5, 0.0, 1.0);
+	vec3 snow_color = vec3(0.85, 0.88, 0.92);
+	final_color = mix(final_color, snow_color, snow_amount);
+	rough = mix(rough, 0.7, snow_amount);
+
 	ALBEDO = final_color * ao;
-	ROUGHNESS = 1.0;
+	ROUGHNESS = rough;
 	METALLIC = 0.0;
 }

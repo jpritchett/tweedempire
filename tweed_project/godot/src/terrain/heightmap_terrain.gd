@@ -35,6 +35,7 @@ class_name HeightmapTerrain
 
 var _image: Image
 var _mesh_instance: MeshInstance3D
+var _water_instance: MeshInstance3D
 
 func _ready() -> void:
 	_mesh_instance = MeshInstance3D.new()
@@ -152,6 +153,12 @@ func _apply_terrain_shader() -> void:
 	mat.set_shader_parameter("height_min", 0.0)
 	mat.set_shader_parameter("height_max", height_scale)
 
+	# Default weather texture (no rain, no fog, mild temperature 0.5)
+	var weather_img := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	weather_img.fill(Color(0.0, 0.0, 0.5, 1.0))  # R=rain=0, G=fog=0, B=temp=0.5
+	mat.set_shader_parameter("weather_rain_fog_tex", ImageTexture.create_from_image(weather_img))
+	mat.set_shader_parameter("weather_world_size", Vector2(size_x, size_z))
+
 	_mesh_instance.material_override = mat
 
 func _create_water_plane() -> void:
@@ -160,15 +167,15 @@ func _create_water_plane() -> void:
 	water_mesh.size = Vector2(size_x * 10.0, size_z * 10.0)
 	water_mesh.subdivide_width = 512
 	water_mesh.subdivide_depth = 512
-	var water_instance := MeshInstance3D.new()
-	water_instance.mesh = water_mesh
-	water_instance.position = Vector3(size_x * 0.5, water_y, size_z * 0.5)
-	add_child(water_instance)
+	_water_instance = MeshInstance3D.new()
+	_water_instance.mesh = water_mesh
+	_water_instance.position = Vector3(size_x * 0.5, water_y, size_z * 0.5)
+	add_child(_water_instance)
 
 	var shader := load("res://src/terrain/water_shader.gdshader")
 	var mat := ShaderMaterial.new()
 	mat.shader = shader
-	water_instance.material_override = mat
+	_water_instance.material_override = mat
 
 func _vertex_world(ix: int, iz: int) -> Vector3:
 	var x = (float(ix) / float(subdivisions_x)) * size_x
@@ -329,3 +336,13 @@ func _make_rock_texture() -> Texture2D:
 			c = c.lerp(dark, n2 * 0.4)
 			img.set_pixel(x, y, c)
 	return ImageTexture.create_from_image(img)
+
+func get_terrain_material() -> ShaderMaterial:
+	if _mesh_instance == null:
+		return null
+	return _mesh_instance.material_override as ShaderMaterial
+
+func get_water_material() -> ShaderMaterial:
+	if _water_instance == null:
+		return null
+	return _water_instance.material_override as ShaderMaterial

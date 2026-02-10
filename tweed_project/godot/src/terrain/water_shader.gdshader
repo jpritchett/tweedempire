@@ -17,6 +17,11 @@ uniform vec3 shallow_color : source_color = vec3(0.10, 0.14, 0.16);
 uniform vec3 deep_color : source_color = vec3(0.06, 0.09, 0.12);
 uniform vec3 foam_color : source_color = vec3(0.22, 0.24, 0.26);
 
+// ─── Weather (set by WeatherController) ──────────────────────────────────────
+group_uniforms weather;
+uniform float weather_wind_strength : hint_range(0.0, 5.0) = 0.0;
+uniform float weather_rain_intensity : hint_range(0.0, 1.0) = 0.0;
+
 // ─── Surface ─────────────────────────────────────────────────────────────────
 group_uniforms surface;
 uniform float water_alpha : hint_range(0.0, 1.0) = 0.96;
@@ -106,8 +111,9 @@ void vertex() {
 	disp += gerstner(wave_c, p, t);
 	disp += gerstner(wave_d, p, t);
 
-	// Apply global amplitude scaling
-	VERTEX += disp * amplitude;
+	// Apply global amplitude scaling, boosted by weather wind
+	float storm_amp = amplitude * (1.0 + weather_wind_strength * 1.5);
+	VERTEX += disp * storm_amp;
 
 	// Analytical surface normal from accumulated wave tangent/binormal
 	vec3 tangent = vec3(1.0, 0.0, 0.0);
@@ -120,7 +126,7 @@ void vertex() {
 	NORMAL = n;
 
 	// Pass wave crest height to fragment shader for foam rendering
-	wave_crest = disp.y * amplitude;
+	wave_crest = disp.y * storm_amp;
 	world_normal = n;
 }
 
@@ -133,15 +139,21 @@ void fragment() {
 	// Water colour: subtle blend shallow → deep based on view angle
 	vec3 water_col = mix(shallow_color, deep_color, 0.4 + fresnel * 0.3);
 
-	// Foam on wave crests — subtle whitecaps only on the highest peaks
-	float foam_edge = foam_threshold * amplitude;
-	float foam_mask = smoothstep(foam_edge, amplitude, wave_crest);
+	// Foam on wave crests — lower threshold in storms for more whitecaps
+	float storm_amp = amplitude * (1.0 + weather_wind_strength * 1.5);
+	float storm_foam_thresh = foam_threshold * (1.0 - weather_wind_strength * 0.15);
+	float foam_edge = storm_foam_thresh * storm_amp;
+	float foam_mask = smoothstep(foam_edge, storm_amp, wave_crest);
 	water_col = mix(water_col, foam_color, foam_mask * 0.35);
 
 	// Very subtle noise ripple for micro-detail
 	float ripple = noise2(world_pos.xz * 2.0 + TIME * 0.3);
 	ripple = (ripple - 0.5) * normal_detail_scale * 0.02;
-	water_col += ripple;
+
+	// Rain ripple noise on surface
+	float rain_ripple = noise2(world_pos.xz * 8.0 + TIME * 2.5);
+	rain_ripple = (rain_ripple - 0.5) * weather_rain_intensity * 0.03;
+	water_col += ripple + rain_ripple;
 
 	ALBEDO = water_col;
 	ALPHA = mix(water_alpha, 1.0, foam_mask * 0.4);

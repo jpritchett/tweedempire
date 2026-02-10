@@ -17,6 +17,12 @@ var ghost: Node3D
 var sky_controller: SkyController
 var enemy_spawner: EnemySpawner
 var inventory_hud: InventoryHUD
+var weather_controller: WeatherController
+var weather_hud: WeatherHUD
+
+# Stored for weather controller access
+var _sky_mat: ShaderMaterial
+var _env: Environment
 
 # entity_id -> view node
 var views := {}
@@ -89,6 +95,23 @@ func _ready() -> void:
 	inventory_hud = InventoryHUD.new()
 	add_child(inventory_hud)
 
+	# Setup weather controller
+	weather_controller = WeatherController.new()
+	add_child(weather_controller)
+	weather_controller.setup(
+		_sky_mat,
+		terrain.get_terrain_material(),
+		terrain.get_water_material(),
+		_env,
+		sun,
+		cam
+	)
+
+	# Setup weather HUD
+	weather_hud = WeatherHUD.new()
+	add_child(weather_hud)
+	weather_hud.setup(weather_controller, cam)
+
 	# Connect simulation signals
 	Simulation.tick_advanced.connect(_on_tick)
 	Simulation.entity_died.connect(_on_entity_died)
@@ -96,36 +119,38 @@ func _ready() -> void:
 
 func _setup_environment() -> void:
 	var env_node := WorldEnvironment.new()
-	var env := Environment.new()
+	_env = Environment.new()
 	var sky := Sky.new()
 
 	# Load the procedural sky shader
 	var sky_shader := load("res://src/sky/sky_shader.gdshader")
-	var sky_mat := ShaderMaterial.new()
-	sky_mat.shader = sky_shader
+	_sky_mat = ShaderMaterial.new()
+	_sky_mat.shader = sky_shader
 
 	# Set sky shader uniforms (can be tuned in code or exposed via SkyController)
-	sky_mat.set_shader_parameter("day_top_color", Color(0.2, 0.4, 0.8))
-	sky_mat.set_shader_parameter("day_horizon_color", Color(0.6, 0.75, 0.9))
-	sky_mat.set_shader_parameter("night_top_color", Color(0.02, 0.02, 0.06))
-	sky_mat.set_shader_parameter("night_horizon_color", Color(0.05, 0.05, 0.1))
-	sky_mat.set_shader_parameter("sunset_color", Color(1.0, 0.4, 0.1))
-	sky_mat.set_shader_parameter("cloud_speed", 0.01)
-	sky_mat.set_shader_parameter("cloud_density", 0.5)
-	sky_mat.set_shader_parameter("cloud_scale", 3.0)
-	sky_mat.set_shader_parameter("cloud_octaves", 5)
-	sky_mat.set_shader_parameter("star_density", 800.0)
+	_sky_mat.set_shader_parameter("day_top_color", Color(0.2, 0.4, 0.8))
+	_sky_mat.set_shader_parameter("day_horizon_color", Color(0.6, 0.75, 0.9))
+	_sky_mat.set_shader_parameter("night_top_color", Color(0.02, 0.02, 0.06))
+	_sky_mat.set_shader_parameter("night_horizon_color", Color(0.05, 0.05, 0.1))
+	_sky_mat.set_shader_parameter("sunset_color", Color(1.0, 0.4, 0.1))
+	_sky_mat.set_shader_parameter("cloud_speed", 0.01)
+	_sky_mat.set_shader_parameter("cloud_density", 0.5)
+	_sky_mat.set_shader_parameter("cloud_scale", 3.0)
+	_sky_mat.set_shader_parameter("cloud_octaves", 5)
+	_sky_mat.set_shader_parameter("star_density", 800.0)
 
-	sky.sky_material = sky_mat
+	sky.sky_material = _sky_mat
 	sky.process_mode = Sky.PROCESS_MODE_REALTIME  # Enable TIME updates for animation
 
-	env.sky = sky
-	env.background_mode = Environment.BG_SKY
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 2.0
-	env.tonemap_exposure = 1.4
-	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env_node.environment = env
+	_env.sky = sky
+	_env.background_mode = Environment.BG_SKY
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	_env.ambient_light_energy = 2.0
+	_env.tonemap_exposure = 1.4
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.fog_enabled = true
+	_env.fog_density = 0.0
+	env_node.environment = _env
 	add_child(env_node)
 
 func _setup_light() -> void:
